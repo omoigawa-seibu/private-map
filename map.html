@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>思川西部マップ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #map { height: 100%; width: 100%; }
+    .gps-button {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      z-index: 1000;
+      background: white;
+      border: 1px solid #ccc;
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      box-shadow: 1px 1px 5px rgba(0,0,0,0.3);
+      font-weight: bold;
+    }
+    .label-style {
+      background: white;
+      color: black;
+      font-size: 12px;
+      font-weight: bold;
+      padding: 2px 4px;
+      border-radius: 4px;
+      border: 1px solid #888;
+      box-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="gps-button" onclick="toggleTracking()">📡 GPS</div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([36.2917, 139.7351], 15);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    const layers = {
+      yosuiki: L.geoJSON(null, {
+        pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
+          radius: 8,
+          fillColor: '#ADFF2F',
+          color: '#7FBA00',
+          weight: 1,
+          opacity: 1,
+          fillOpacity: 0.8
+        }),
+        onEachFeature: onEachYosuiki
+      }),
+
+      bunsuikoToshuko: L.geoJSON(null, {
+        pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
+          radius: 8,
+          fillColor: 'yellow',
+          color: 'goldenrod',
+          weight: 1,
+          opacity: 1,
+          fillOpacity: 0.8
+        }),
+        onEachFeature: onEachBunsuikoToshuko
+      }),
+
+      kaisuiro: L.geoJSON(null, {
+        pointToLayer: (feature, latlng) => {
+          let color = 'gray';
+          const ppCode = feature.properties?.PP1_C02;
+          if (ppCode === '005') color = 'orange';
+          if (ppCode === '006') color = '#01ffea';
+
+          return L.circleMarker(latlng, {
+            radius: 8,
+            fillColor: color,
+            color: '#333',
+            weight: 1,
+            opacity: 1,
+            fillOpacity: 0.8
+          });
+        },
+        onEachFeature: onEachDefault
+      }),
+
+      oaza: L.geoJSON(null, {
+        style: {
+          color: '#ff01e6',
+          weight: 2,
+          fillOpacity: 0
+        },
+        onEachFeature: onEachDefault
+      }),
+
+      chiban: L.geoJSON(null, {
+        style: {
+          color: 'blue',
+          fillColor: 'white',
+          fillOpacity: 0.5,
+          weight: 1
+        },
+        onEachFeature: onEachDefault // ← ラベルなしに変更
+      })
+    };
+
+    // -------- GeoJSON読み込み --------
+    fetch('yosuiki.geojson').then(res => res.json()).then(data => layers.yosuiki.addData(data));
+    fetch('bunsuiko_toshuko.geojson').then(res => res.json()).then(data => layers.bunsuikoToshuko.addData(data));
+    fetch('kaisuiro.geojson').then(res => res.json()).then(data => layers.kaisuiro.addData(data));
+    fetch('oaza.geojson').then(res => res.json()).then(data => layers.oaza.addData(data));
+    fetch('chiban.geojson').then(res => res.json()).then(data => layers.chiban.addData(data));
+
+    const overlayMaps = {
+      "地番確認": layers.chiban,
+      "大字境界": layers.oaza,
+      "開水路": layers.kaisuiro,
+      "分水工・頭首工": layers.bunsuikoToshuko,
+      "揚水機場": layers.yosuiki
+    };
+
+    L.control.layers(null, overlayMaps, { collapsed: false }).addTo(map);
+
+    // ---------- ラベル付きポップアップ ----------
+    function onEachYosuiki(feature, layer) {
+      layer.bindPopup(generatePopup(feature));
+      if (feature.properties.機場名) {
+        layer.bindTooltip(feature.properties.機場名, {
+          permanent: true,
+          direction: 'top',
+          offset: [0, -10],
+          className: 'label-style'
+        });
+      }
+    }
+
+    function onEachBunsuikoToshuko(feature, layer) {
+      layer.bindPopup(generatePopup(feature));
+      if (feature.properties.名称) {
+        layer.bindTooltip(feature.properties.名称, {
+          permanent: true,
+          direction: 'top',
+          offset: [0, -10],
+          className: 'label-style'
+        });
+      }
+    }
+
+    function onEachDefault(feature, layer) {
+      layer.bindPopup(generatePopup(feature));
+    }
+
+    function generatePopup(feature) {
+      let popup = "";
+      for (let key in feature.properties) {
+        popup += `<strong>${key}</strong>: ${feature.properties[key]}<br>`;
+      }
+      return popup;
+    }
+
+    // ---------- GPS追跡 ----------
+    let gpsMarker = null;
+    let gpsCircle = null;
+    let watchId = null;
+    let isTracking = false;
+
+    function toggleTracking() {
+      if (isTracking) {
+        navigator.geolocation.clearWatch(watchId);
+        if (gpsMarker) map.removeLayer(gpsMarker);
+        if (gpsCircle) map.removeLayer(gpsCircle);
+        isTracking = false;
+        alert("GPS追跡を停止しました");
+      } else {
+        if (!navigator.geolocation) {
+          alert("この端末では位置情報が使用できません。");
+          return;
+        }
+
+        watchId = navigator.geolocation.watchPosition(
+          position => {
+            const latlng = [position.coords.latitude, position.coords.longitude];
+
+            if (!gpsMarker) {
+              gpsMarker = L.marker(latlng, { title: "あなたの位置" }).addTo(map);
+              gpsCircle = L.circle(latlng, {
+                radius: position.coords.accuracy,
+                color: 'blue',
+                fillColor: 'blue',
+                fillOpacity: 0.2
+              }).addTo(map);
+            } else {
+              gpsMarker.setLatLng(latlng);
+              gpsCircle.setLatLng(latlng);
+              gpsCircle.setRadius(position.coords.accuracy);
+            }
+
+            map.setView(latlng, 16);
+          },
+          error => {
+            alert("現在地の取得に失敗しました: " + error.message);
+          },
+          { enableHighAccuracy: true }
+        );
+
+        isTracking = true;
+        alert("GPS追跡を開始しました");
+      }
+    }
+  </script>
+</body>
+</html>
