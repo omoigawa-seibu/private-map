@@ -2,33 +2,12 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <title>検索付きマップ</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
+  <title>Leaflet Map with Layers and Search</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     html, body { height: 100%; margin: 0; }
     #map { height: 100%; width: 100%; }
-
-    .search-container {
-      position: absolute;
-      top: 10px;
-      left: 10px;  /* ← 左上に配置 */
-      z-index: 1000;
-      background: white;
-      border-radius: 6px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-      padding: 8px;
-    }
-
-    .search-container input {
-      padding: 6px;
-      font-size: 14px;
-      width: 180px;
-    }
-
     .gps-button {
       position: absolute;
       bottom: 10px;
@@ -41,12 +20,26 @@
       cursor: pointer;
       box-shadow: 1px 1px 5px rgba(0,0,0,0.3);
     }
+    .search-box {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
+      background: white;
+      padding: 6px 10px;
+      border-radius: 4px;
+      box-shadow: 1px 1px 5px rgba(0,0,0,0.3);
+    }
+    .search-box input {
+      width: 180px;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
   <div id="map"></div>
-  <div class="search-container">
-    <input type="text" id="searchBox" placeholder="地名や施設名を検索" />
+  <div class="search-box">
+    <input type="text" id="search" placeholder="レイヤ名で検索" />
   </div>
   <div class="gps-button" onclick="toggleTracking()">📍 GPS</div>
 
@@ -58,104 +51,66 @@
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    // ---- レイヤ定義（サンプル名） ----
-    const bunsuikoLayer = L.geoJSON(null, {
-      onEachFeature: onEachFeature
-    });
-
-    const kaisuiroLayer = L.geoJSON(null, {
-      onEachFeature: onEachFeature
+    // ---------- 各レイヤ ----------
+    const chibanLayer = L.geoJSON(null, {
+      style: {
+        color: 'blue',
+        fillColor: 'white',
+        fillOpacity: 0.5
+      }
     });
 
     const oazaLayer = L.geoJSON(null, {
-      style: { color: "#ff01e6", weight: 2 },
-      onEachFeature: onEachFeature
+      style: {
+        color: '#ff01e6',
+        fillOpacity: 0
+      }
     });
 
-    const chibanLayer = L.geoJSON(null, {
-      style: {
-        color: "blue",
-        fillColor: "white",
-        fillOpacity: 0.5,
-        weight: 1
+    const kaisuiroLayer = L.geoJSON(null, {
+      style: feature => {
+        const code = feature.properties?.PP1_C02;
+        let color = '#ff9900'; // default orange
+        if (code === '006') color = '#01ffea';
+        return { color };
+      }
+    });
+
+    const bunsuikoToshukoLayer = L.geoJSON(null, {
+      style: { color: 'yellowgreen' },
+      onEachFeature: (feature, layer) => {
+        const name = feature.properties?.名称 || feature.properties?.name;
+        if (name) layer.bindTooltip(name, { permanent: true, direction: 'top' });
       }
     });
 
     const yosuikiLayer = L.geoJSON(null, {
-      pointToLayer: (feature, latlng) =>
-        L.circleMarker(latlng, {
-          radius: 6,
-          fillColor: "yellowgreen",
-          color: "#555",
-          weight: 1,
-          fillOpacity: 0.8
-        }),
-      onEachFeature: onEachFeature
-    });
-
-    // 表示順（最下層が先）
-    bunsuikoLayer.addTo(map);
-    yosuikiLayer.addTo(map);
-    kaisuiroLayer.addTo(map);
-    oazaLayer.addTo(map);
-    chibanLayer.addTo(map);
-
-    L.control.layers(null, {
-      "分水工・頭首工": bunsuikoLayer,
-      "揚水機場": yosuikiLayer,
-      "開水路": kaisuiroLayer,
-      "大字境界": oazaLayer,
-      "地番確認": chibanLayer
-    }).addTo(map);
-
-    // ---- GeoJSON読み込み（ファイル名に合わせて変更） ----
-    fetch('bunsuiko_toshuko.geojson').then(res => res.json()).then(data => {
-      bunsuikoLayer.addData(data);
-    });
-
-    fetch('yosuiki.geojson').then(res => res.json()).then(data => {
-      yosuikiLayer.addData(data);
-    });
-
-    fetch('kaisuiro.geojson').then(res => res.json()).then(data => {
-      kaisuiroLayer.addData(data);
-    });
-
-    fetch('oaza.geojson').then(res => res.json()).then(data => {
-      oazaLayer.addData(data);
-    });
-
-    fetch('chiban.geojson').then(res => res.json()).then(data => {
-      chibanLayer.addData(data);
-    });
-
-    function onEachFeature(feature, layer) {
-      let popup = '';
-      for (let key in feature.properties) {
-        popup += `<strong>${key}</strong>: ${feature.properties[key]}<br>`;
+      style: { color: 'limegreen' },
+      onEachFeature: (feature, layer) => {
+        const name = feature.properties?.機場名;
+        if (name) layer.bindTooltip(name, { permanent: true, direction: 'top' });
       }
-      layer.bindPopup(popup);
-    }
-
-    // ---- 検索機能（内部一致） ----
-    document.getElementById('searchBox').addEventListener('input', function () {
-      const keyword = this.value.toLowerCase();
-
-      [bunsuikoLayer, yosuikiLayer, kaisuiroLayer].forEach(layer => {
-        layer.eachLayer(l => {
-          const props = l.feature.properties;
-          const found = Object.values(props).some(val =>
-            String(val).toLowerCase().includes(keyword)
-          );
-          if (found) {
-            l.openPopup();
-            map.fitBounds(l.getBounds ? l.getBounds() : L.latLngBounds(l.getLatLng()));
-          }
-        });
-      });
     });
 
-    // ---- GPS機能 ----
+    // レイヤ順番（上から表示）
+    const overlayMaps = {
+      "地番確認": chibanLayer,
+      "大字境界": oazaLayer,
+      "開水路": kaisuiroLayer,
+      "分水工・頭首工": bunsuikoToshukoLayer,
+      "揚水機場": yosuikiLayer
+    };
+
+    L.control.layers(null, overlayMaps, { collapsed: false }).addTo(map);
+
+    // GeoJSON読み込み（ファイル名と一致）
+    fetch('chiban.geojson').then(res => res.json()).then(data => chibanLayer.addData(data));
+    fetch('oaza.geojson').then(res => res.json()).then(data => oazaLayer.addData(data));
+    fetch('kaisuiro.geojson').then(res => res.json()).then(data => kaisuiroLayer.addData(data));
+    fetch('bunsuiko_toshuko.geojson').then(res => res.json()).then(data => bunsuikoToshukoLayer.addData(data));
+    fetch('yosuiki.geojson').then(res => res.json()).then(data => yosuikiLayer.addData(data));
+
+    // ---------- GPS追跡 ----------
     let gpsMarker = null;
     let gpsCircle = null;
     let watchId = null;
@@ -170,34 +125,61 @@
         alert("GPS追跡を停止しました");
       } else {
         if (!navigator.geolocation) {
-          alert("この端末ではGPSが使えません");
+          alert("この端末では位置情報が使用できません。");
           return;
         }
 
         watchId = navigator.geolocation.watchPosition(
-          pos => {
-            const latlng = [pos.coords.latitude, pos.coords.longitude];
+          position => {
+            const latlng = [position.coords.latitude, position.coords.longitude];
+
             if (!gpsMarker) {
-              gpsMarker = L.marker(latlng).addTo(map);
+              gpsMarker = L.marker(latlng, { title: "あなたの位置" }).addTo(map);
               gpsCircle = L.circle(latlng, {
-                radius: pos.coords.accuracy,
+                radius: position.coords.accuracy,
                 color: 'blue',
                 fillColor: 'blue',
                 fillOpacity: 0.2
               }).addTo(map);
             } else {
               gpsMarker.setLatLng(latlng);
-              gpsCircle.setLatLng(latlng).setRadius(pos.coords.accuracy);
+              gpsCircle.setLatLng(latlng);
+              gpsCircle.setRadius(position.coords.accuracy);
             }
+
             map.setView(latlng, 16);
           },
-          err => alert("位置取得に失敗：" + err.message),
+          error => {
+            alert("現在地の取得に失敗しました: " + error.message);
+          },
           { enableHighAccuracy: true }
         );
+
         isTracking = true;
         alert("GPS追跡を開始しました");
       }
     }
+
+    // ---------- 検索機能（内部一致） ----------
+    document.getElementById("search").addEventListener("input", function () {
+      const keyword = this.value.trim().toLowerCase();
+      let found = false;
+
+      [bunsuikoToshukoLayer, yosuikiLayer].forEach(layer => {
+        layer.eachLayer(featureLayer => {
+          const props = featureLayer.feature.properties;
+          const name = props?.名称 || props?.機場名 || '';
+          if (name.toLowerCase().includes(keyword) && keyword !== '') {
+            const latlng = featureLayer.getBounds().getCenter();
+            featureLayer.openPopup?.();
+            map.setView(latlng, 17);
+            found = true;
+          }
+        });
+      });
+
+      // 見つからない場合ズームはしない
+    });
   </script>
 </body>
 </html>
