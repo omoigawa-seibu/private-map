@@ -50,6 +50,7 @@
 
     // 検索対象フィーチャの保存用
     let searchableLayers = [];
+    let overlayMaps = {};
 
     function createPopup(feature) {
       let content = '';
@@ -60,19 +61,13 @@
     }
 
     // 汎用レイヤ読み込み関数（レイヤの順番に注意）
-    const layers = {};
-
-    function loadLayer(file, layerName, style = {}, labelField = null) {
+    function loadLayer(file, layerName, style = {}, labelField = null, pointLayer = false) {
       fetch(file)
         .then(res => res.json())
         .then(data => {
           const layer = L.geoJSON(data, {
             style: style,
             onEachFeature: function (feature, layer) {
-              // 検索対象に追加
-              searchableLayers.push({ name: feature.properties[labelField || 'name'], layer });
-
-              // ラベル表示
               if (labelField && feature.properties[labelField]) {
                 layer.bindTooltip(feature.properties[labelField], {
                   permanent: true,
@@ -81,10 +76,10 @@
                 });
               }
 
-              // クリックでポップアップ表示
+              searchableLayers.push({ name: feature.properties[labelField || 'name'], layer });
+
               layer.on('click', function () {
-                const content = createPopup(feature);
-                layer.bindPopup(content).openPopup();
+                layer.bindPopup(createPopup(feature)).openPopup();
               });
             },
             pointToLayer: function (feature, latlng) {
@@ -97,8 +92,10 @@
                 fillOpacity: style.fillOpacity || 0.8
               });
             }
-          }).addTo(map);
-          layers[layerName] = layer;
+          });
+
+          layer.addTo(map);
+          overlayMaps[layerName] = layer;
         });
     }
 
@@ -134,8 +131,10 @@
               layer.bindPopup(createPopup(feature)).openPopup();
             });
           }
-        }).addTo(map);
-        layers["開水路"] = layer;
+        });
+
+        layer.addTo(map);
+        overlayMaps["開水路"] = layer;
       });
 
     // 分水工・頭首工（ラベルあり）
@@ -143,27 +142,31 @@
       color: "green",
       fillColor: "green",
       fillOpacity: 0.7
-    }, "名称");
+    }, "名称", true);
 
-    // 揚水機場（ラベルあり）
+    // 揚水機場（ラベルあり、ピン表示）
     loadLayer("yosuiki.geojson", "揚水機場", {
       color: "lightgreen",
       fillColor: "lightgreen",
       fillOpacity: 0.7
-    }, "機場名");
+    }, "機場名", true);
 
-    // 🔍検索機能
+    // 🔍検索機能（内部一致＋表示中レイヤ限定）
     document.getElementById("searchInput").addEventListener("input", function () {
       const keyword = this.value.trim().toLowerCase();
       searchableLayers.forEach(({ name, layer }) => {
+        if (!map.hasLayer(layer)) return; // 表示中のレイヤのみ
         if (!keyword || (name && name.toLowerCase().includes(keyword))) {
-          map.addLayer(layer);
+          layer.setStyle && layer.setStyle({ opacity: 1, fillOpacity: 0.7 });
+          if (layer._path) layer._path.style.display = '';
         } else {
-          map.removeLayer(layer);
+          if (layer._path) layer._path.style.display = 'none';
         }
       });
     });
 
+    // ✅ レイヤ選択（チェックボックス）
+    const layerControl = L.control.layers(null, overlayMaps, { collapsed: false }).addTo(map);
   </script>
 </body>
 </html>
