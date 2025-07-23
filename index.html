@@ -2,9 +2,9 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Leaflet Map</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
     html, body, #map {
       height: 100%;
@@ -17,227 +17,171 @@
       left: 10px;
       z-index: 1000;
       background: white;
-      padding: 5px;
-      border-radius: 5px;
-    }
-    .leaflet-bottom.leaflet-right {
-      margin-right: 10px;
+      padding: 6px;
+      border-radius: 4px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.3);
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
   <div class="search-box">
-    <input type="text" id="searchInput" placeholder="検索..." />
+    <input type="text" id="searchInput" placeholder="検索キーワード">
     <button onclick="searchFeatures()">検索</button>
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
   <script>
-    const map = L.map('map', {
-      zoomControl: false
-    }).setView([36.2917, 139.7351], 15);
+    const map = L.map('map').setView([36.3, 139.2], 13);
 
-    // OpenStreetMap
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors'
+      maxZoom: 19
     }).addTo(map);
 
-    // 拡大縮小ボタン（左下）
-    L.control.zoom({ position: 'bottomleft' }).addTo(map);
+    // --- カスタムアイコン（揚水機用） ---
+    const yosuikiIcon = L.icon({
+      iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x-green.png",
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+      shadowSize: [41, 41]
+    });
 
-    // GPSボタン（右下）
-    const locateBtn = L.control({ position: 'bottomright' });
-    locateBtn.onAdd = () => {
-      const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
-      const btn = L.DomUtil.create('a', '', div);
-      btn.innerHTML = 'GPS';
-      btn.href = '#';
-      btn.title = '現在地を表示';
-      btn.style.padding = '5px';
-      btn.onclick = e => {
-        e.preventDefault();
-        map.locate({ setView: true, maxZoom: 18 });
-      };
-      return div;
-    };
-    locateBtn.addTo(map);
+    // --- 各レイヤ ---
+    const bunsuikoLayer = L.geoJSON(null, {
+      pointToLayer: (feature, latlng) => {
+        return L.circleMarker(latlng, {
+          radius: 6,
+          color: "green",
+          fillColor: "green",
+          fillOpacity: 1
+        }).bindTooltip(feature.properties.名称, { permanent: true, direction: 'right' })
+          .bindPopup(popupContent(feature));
+      }
+    });
+    fetch("bunsuiko_toshuko.geojson").then(res => res.json()).then(data => bunsuikoLayer.addData(data));
 
-    // 各レイヤ作成
-    const chibanLayer = L.layerGroup();
-    const oazaLayer = L.layerGroup();
-    const kaisuiroLayer = L.layerGroup();
-    const yosuikiLayer = L.layerGroup();
-    const bunsuikoLayer = L.layerGroup();
+    const yosuikiLayer = L.geoJSON(null, {
+      pointToLayer: (feature, latlng) => {
+        return L.marker(latlng, { icon: yosuikiIcon })
+          .bindTooltip(feature.properties.機場名, { permanent: true, direction: 'right' })
+          .bindPopup(popupContent(feature));
+      }
+    });
+    fetch("yosuiki.geojson").then(res => res.json()).then(data => yosuikiLayer.addData(data));
 
-    // GeoJSON読み込み
-    // 地番確認
-    fetch('chiban.geojson')
-      .then(res => res.json())
-      .then(data => {
-        L.geoJSON(data, {
-          style: {
-            color: 'blue',
-            fillColor: 'white',
-            fillOpacity: 0.5,
-            weight: 1
-          },
-          onEachFeature: (feature, layer) => {
-            layer.on('click', () => {
-              const props = feature.properties;
-              let content = `<strong>詳細データ</strong><br/>`;
-              for (let key in props) {
-                content += `${key}: ${props[key]}<br/>`;
-              }
-              layer.bindPopup(content).openPopup();
-            });
-          }
-        }).addTo(chibanLayer);
-      });
+    const kaisuiroLayer = L.geoJSON(null, {
+      style: {
+        color: "orange",
+        weight: 3
+      },
+      onEachFeature: (feature, layer) => {
+        layer.bindPopup(popupContent(feature));
+      }
+    });
+    fetch("kaisuiro.geojson").then(res => res.json()).then(data => kaisuiroLayer.addData(data));
 
-    // 大字境界
-    fetch('oaza.geojson')
-      .then(res => res.json())
-      .then(data => {
-        L.geoJSON(data, {
-          style: {
-            color: '#ff01e6',
-            fillOpacity: 0,
-            weight: 2
-          },
-          onEachFeature: (feature, layer) => {
-            layer.on('click', () => {
-              const props = feature.properties;
-              let content = `<strong>詳細データ</strong><br/>`;
-              for (let key in props) {
-                content += `${key}: ${props[key]}<br/>`;
-              }
-              layer.bindPopup(content).openPopup();
-            });
-          }
-        }).addTo(oazaLayer);
-      });
+    const oazaLayer = L.geoJSON(null, {
+      style: {
+        color: "#ff01e6",
+        weight: 2,
+        fillOpacity: 0
+      },
+      onEachFeature: (feature, layer) => {
+        layer.bindPopup(popupContent(feature));
+      }
+    });
+    fetch("oaza.geojson").then(res => res.json()).then(data => oazaLayer.addData(data));
 
-    // 開水路（常にオレンジ）
-    fetch('kaisuiro.geojson')
-      .then(res => res.json())
-      .then(data => {
-        L.geoJSON(data, {
-          style: {
-            color: 'orange',
-            weight: 2
-          },
-          onEachFeature: (feature, layer) => {
-            layer.on('click', () => {
-              const props = feature.properties;
-              let content = `<strong>詳細データ</strong><br/>`;
-              for (let key in props) {
-                content += `${key}: ${props[key]}<br/>`;
-              }
-              layer.bindPopup(content).openPopup();
-            });
-          }
-        }).addTo(kaisuiroLayer);
-      });
+    const chibanLayer = L.geoJSON(null, {
+      style: {
+        color: "blue",
+        fillColor: "white",
+        weight: 1,
+        fillOpacity: 0.5
+      },
+      onEachFeature: (feature, layer) => {
+        layer.bindPopup(popupContent(feature));
+      }
+    });
+    fetch("chiban.geojson").then(res => res.json()).then(data => chibanLayer.addData(data));
 
-    // 揚水機場（黄緑＋機場名ラベル）
-    fetch('yosuiki.geojson')
-      .then(res => res.json())
-      .then(data => {
-        L.geoJSON(data, {
-          pointToLayer: (feature, latlng) => {
-            const marker = L.circleMarker(latlng, {
-              radius: 6,
-              color: 'limegreen',
-              fillColor: 'limegreen',
-              fillOpacity: 1
-            });
-            if (feature.properties && feature.properties.機場名) {
-              marker.bindTooltip(feature.properties.機場名, { permanent: true, direction: 'right' });
-            }
-            marker.on('click', () => {
-              const props = feature.properties;
-              let content = `<strong>詳細データ</strong><br/>`;
-              for (let key in props) {
-                content += `${key}: ${props[key]}<br/>`;
-              }
-              marker.bindPopup(content).openPopup();
-            });
-            return marker;
-          }
-        }).addTo(yosuikiLayer);
-      });
-
-    // 分水工・頭首工（緑＋名称ラベル）
-    fetch('bunsuiko_toshuko.geojson')
-      .then(res => res.json())
-      .then(data => {
-        L.geoJSON(data, {
-          pointToLayer: (feature, latlng) => {
-            const marker = L.circleMarker(latlng, {
-              radius: 6,
-              color: 'green',
-              fillColor: 'green',
-              fillOpacity: 1
-            });
-            if (feature.properties && feature.properties.名称) {
-              marker.bindTooltip(feature.properties.名称, { permanent: true, direction: 'right' });
-            }
-            marker.on('click', () => {
-              const props = feature.properties;
-              let content = `<strong>詳細データ</strong><br/>`;
-              for (let key in props) {
-                content += `${key}: ${props[key]}<br/>`;
-              }
-              marker.bindPopup(content).openPopup();
-            });
-            return marker;
-          }
-        }).addTo(bunsuikoLayer);
-      });
-
-    // レイヤ制御
-    const overlays = {
-  '分水工・頭首工': bunsuikoLayer,
-  '揚水機場': yosuikiLayer,
-  '開水路': kaisuiroLayer,
-  '大字境界': oazaLayer,
-  '地番確認': chibanLayer
-};
-
-    L.control.layers(null, overlays, { position: 'topright' }).addTo(map);
-
-    // 初期レイヤ追加
+    // --- レイヤ追加順（地番→大字→開水路→揚水機→分水工） ---
     chibanLayer.addTo(map);
     oazaLayer.addTo(map);
     kaisuiroLayer.addTo(map);
     yosuikiLayer.addTo(map);
     bunsuikoLayer.addTo(map);
 
-    // 検索機能（表示レイヤ内・内部一致）
-    function searchFeatures() {
-      const keyword = document.getElementById("searchInput").value;
-      const visibleLayers = [chibanLayer, oazaLayer, kaisuiroLayer, yosuikiLayer, bunsuikoLayer];
-      visibleLayers.forEach(layerGroup => {
-        if (map.hasLayer(layerGroup)) {
-          layerGroup.eachLayer(layer => {
-            if (layer.feature && layer.feature.properties) {
-              const props = layer.feature.properties;
-              const match = Object.values(props).some(v => String(v).includes(keyword));
-              if (match) {
-                if (layer.getLatLng) {
-                  map.setView(layer.getLatLng(), 17);
-                  layer.openPopup();
-                } else if (layer.getBounds) {
-                  map.fitBounds(layer.getBounds());
-                  layer.openPopup();
-                }
-              }
-            }
-          });
-        }
+    // --- レイヤコントロール（表示順逆順） ---
+    const overlays = {
+      "分水工・頭首工": bunsuikoLayer,
+      "揚水機場": yosuikiLayer,
+      "開水路": kaisuiroLayer,
+      "大字境界": oazaLayer,
+      "地番確認": chibanLayer
+    };
+    L.control.layers(null, overlays, { position: 'topright', collapsed: false }).addTo(map);
+
+    // --- GPSボタン（右下） ---
+    const gpsControl = L.control({ position: 'bottomright' });
+    gpsControl.onAdd = function () {
+      const div = L.DomUtil.create('div', 'leaflet-bar');
+      const button = L.DomUtil.create('a', '', div);
+      button.innerHTML = '📍GPS';
+      button.href = '#';
+      button.title = '現在地を表示';
+      L.DomEvent.on(button, 'click', function (e) {
+        L.DomEvent.preventDefault(e);
+        map.locate({ setView: true, maxZoom: 16 });
       });
+      return div;
+    };
+    gpsControl.addTo(map);
+
+    // --- 拡大・縮小ボタン（左下） ---
+    L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+    // --- 検索機能（内部一致＆表示レイヤのみ） ---
+    function searchFeatures() {
+      const keyword = document.getElementById("searchInput").value.trim();
+      if (!keyword) return;
+
+      const allLayers = [bunsuikoLayer, yosuikiLayer, kaisuiroLayer, oazaLayer, chibanLayer];
+      let found = false;
+
+      allLayers.forEach(layerGroup => {
+        if (!map.hasLayer(layerGroup)) return;
+
+        layerGroup.eachLayer(layer => {
+          const props = layer.feature?.properties;
+          if (!props) return;
+
+          for (const key in props) {
+            const value = props[key];
+            if (typeof value === 'string' && value.includes(keyword)) {
+              layer.openPopup();
+              map.fitBounds(layer.getBounds ? layer.getBounds() : L.latLng(layer.getLatLng()), { maxZoom: 17 });
+              found = true;
+              return;
+            }
+          }
+        });
+      });
+
+      if (!found) {
+        alert("見つかりませんでした。");
+      }
+    }
+
+    // --- 詳細ポップアップ共通関数 ---
+    function popupContent(feature) {
+      const props = feature.properties;
+      return Object.keys(props)
+        .map(key => `<strong>${key}</strong>: ${props[key]}`)
+        .join("<br>");
     }
   </script>
 </body>
