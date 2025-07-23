@@ -40,7 +40,7 @@
       zoomControl: true
     }).setView([36.29170298,139.73511565], 15);
 
-    // 拡大縮小ボタンの位置を左下に
+    // 拡大縮小ボタンを左下に配置
     map.zoomControl.setPosition('bottomleft');
 
     // 背景地図
@@ -48,10 +48,13 @@
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    // 検索対象フィーチャの保存用
+    // 検索用のレイヤ配列
     let searchableLayers = [];
-    let overlayMaps = {};
 
+    // レイヤ管理用
+    const overlayMaps = {};
+
+    // ポップアップ生成
     function createPopup(feature) {
       let content = '';
       for (const key in feature.properties) {
@@ -60,29 +63,26 @@
       return content;
     }
 
-    // 汎用レイヤ読み込み関数（レイヤの順番に注意）
-    function loadLayer(file, layerName, style = {}, labelField = null, pointLayer = false) {
+    // GeoJSONレイヤを読み込む汎用関数
+    function loadLayer(file, name, style = {}, labelField = null, isPoint = false) {
       fetch(file)
         .then(res => res.json())
         .then(data => {
           const layer = L.geoJSON(data, {
-            style: style,
+            style: !isPoint ? style : undefined,
             onEachFeature: function (feature, layer) {
               if (labelField && feature.properties[labelField]) {
                 layer.bindTooltip(feature.properties[labelField], {
                   permanent: true,
-                  direction: 'right',
-                  className: 'feature-label'
+                  direction: 'right'
                 });
               }
-
               searchableLayers.push({ name: feature.properties[labelField || 'name'], layer });
-
               layer.on('click', function () {
                 layer.bindPopup(createPopup(feature)).openPopup();
               });
             },
-            pointToLayer: function (feature, latlng) {
+            pointToLayer: isPoint ? function (feature, latlng) {
               return L.circleMarker(latlng, {
                 radius: 6,
                 fillColor: style.fillColor || "#000",
@@ -91,29 +91,30 @@
                 opacity: 1,
                 fillOpacity: style.fillOpacity || 0.8
               });
-            }
-          });
-
-          layer.addTo(map);
-          overlayMaps[layerName] = layer;
+            } : undefined
+          }).addTo(map);
+          overlayMaps[name] = layer;
+          layersControl.addOverlay(layer, name);
         });
     }
 
-    // 地番確認
+    // Leaflet Layers Control（チェックボックス UI）
+    const layersControl = L.control.layers(null, null, { collapsed: false }).addTo(map);
+
+    // レイヤ読み込み（順番に注意）
     loadLayer("chiban.geojson", "地番確認", {
       color: "blue",
       fillColor: "white",
       fillOpacity: 0.5
     });
 
-    // 大字境界（外郭のみ）
     loadLayer("oaza.geojson", "大字境界", {
       color: "#ff01e6",
       weight: 2,
       fillOpacity: 0
     });
 
-    // 開水路（PP1_C02条件付き色分け）
+    // 開水路（PP1_C02により色分け）
     fetch("kaisuiro.geojson")
       .then(res => res.json())
       .then(data => {
@@ -131,10 +132,9 @@
               layer.bindPopup(createPopup(feature)).openPopup();
             });
           }
-        });
-
-        layer.addTo(map);
+        }).addTo(map);
         overlayMaps["開水路"] = layer;
+        layersControl.addOverlay(layer, "開水路");
       });
 
     // 分水工・頭首工（ラベルあり）
@@ -144,29 +144,27 @@
       fillOpacity: 0.7
     }, "名称", true);
 
-    // 揚水機場（ラベルあり、ピン表示）
+    // 揚水機場（ラベルあり・ピン表示）
     loadLayer("yosuiki.geojson", "揚水機場", {
       color: "lightgreen",
       fillColor: "lightgreen",
       fillOpacity: 0.7
     }, "機場名", true);
 
-    // 🔍検索機能（内部一致＋表示中レイヤ限定）
+    // 🔍 内部一致検索（表示中レイヤのみ）
     document.getElementById("searchInput").addEventListener("input", function () {
       const keyword = this.value.trim().toLowerCase();
       searchableLayers.forEach(({ name, layer }) => {
-        if (!map.hasLayer(layer)) return; // 表示中のレイヤのみ
-        if (!keyword || (name && name.toLowerCase().includes(keyword))) {
-          layer.setStyle && layer.setStyle({ opacity: 1, fillOpacity: 0.7 });
-          if (layer._path) layer._path.style.display = '';
-        } else {
-          if (layer._path) layer._path.style.display = 'none';
+        const visible = map.hasLayer(layer);
+        if (!keyword) {
+          if (!map.hasLayer(layer)) map.addLayer(layer);
+        } else if (name && name.toLowerCase().includes(keyword) && visible) {
+          map.addLayer(layer);
+        } else if (visible) {
+          map.removeLayer(layer);
         }
       });
     });
-
-    // ✅ レイヤ選択（チェックボックス）
-    const layerControl = L.control.layers(null, overlayMaps, { collapsed: false }).addTo(map);
   </script>
 </body>
 </html>
