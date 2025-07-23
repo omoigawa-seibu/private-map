@@ -2,15 +2,11 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Leaflet Map</title>
+  <title>Leaflet 地図</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    html, body { height: 100%; margin: 0; padding: 0; }
-    #map { height: 100%; }
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
     .search-box {
       position: absolute;
       top: 10px;
@@ -36,129 +32,117 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
-    const map = L.map('map', {
-      zoomControl: true
-    }).setView([36.29170298,139.73511565], 15);
-
-    // 拡大縮小ボタンを左下に配置
+    const map = L.map('map').setView([36.2917, 139.7351], 15);
     map.zoomControl.setPosition('bottomleft');
 
-    // 背景地図
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    // 検索用のレイヤ配列
-    let searchableLayers = [];
-
-    // レイヤ管理用
     const overlayMaps = {};
+    const searchableLayers = [];
 
-    // ポップアップ生成
     function createPopup(feature) {
       let content = '';
-      for (const key in feature.properties) {
-        content += `<strong>${key}:</strong> ${feature.properties[key]}<br>`;
+      for (let key in feature.properties) {
+        content += `<strong>${key}</strong>: ${feature.properties[key]}<br>`;
       }
       return content;
     }
 
-    // GeoJSONレイヤを読み込む汎用関数
-    function loadLayer(file, name, style = {}, labelField = null, isPoint = false) {
+    function loadLayer(file, name, options = {}) {
       fetch(file)
         .then(res => res.json())
         .then(data => {
           const layer = L.geoJSON(data, {
-            style: !isPoint ? style : undefined,
+            style: options.style || undefined,
+            pointToLayer: options.isPoint ? function (feature, latlng) {
+              return L.circleMarker(latlng, {
+                radius: 6,
+                color: options.color || "#000",
+                fillColor: options.fillColor || "#000",
+                fillOpacity: options.fillOpacity || 0.8,
+                weight: 1
+              });
+            } : undefined,
             onEachFeature: function (feature, layer) {
-              if (labelField && feature.properties[labelField]) {
-                layer.bindTooltip(feature.properties[labelField], {
-                  permanent: true,
-                  direction: 'right'
-                });
+              const label = feature.properties[options.labelField] || feature.properties.name || '';
+              if (label && options.labelField) {
+                layer.bindTooltip(label, { permanent: true, direction: 'right' });
               }
-              searchableLayers.push({ name: feature.properties[labelField || 'name'], layer });
               layer.on('click', function () {
                 layer.bindPopup(createPopup(feature)).openPopup();
               });
-            },
-            pointToLayer: isPoint ? function (feature, latlng) {
-              return L.circleMarker(latlng, {
-                radius: 6,
-                fillColor: style.fillColor || "#000",
-                color: style.color || "#000",
-                weight: 1,
-                opacity: 1,
-                fillOpacity: style.fillOpacity || 0.8
-              });
-            } : undefined
-          }).addTo(map);
+              searchableLayers.push({ name: label, layer });
+            }
+          });
+          layer.addTo(map);
           overlayMaps[name] = layer;
           layersControl.addOverlay(layer, name);
         });
     }
 
-    // Leaflet Layers Control（チェックボックス UI）
+    // レイヤコントロールを後から使うため先に定義
     const layersControl = L.control.layers(null, null, { collapsed: false }).addTo(map);
 
-    // レイヤ読み込み（順番に注意）
+    // レイヤを順番に読み込み（順序重要）
     loadLayer("chiban.geojson", "地番確認", {
-      color: "blue",
-      fillColor: "white",
-      fillOpacity: 0.5
+      style: { color: "blue", fillColor: "white", fillOpacity: 0.5 }
     });
 
     loadLayer("oaza.geojson", "大字境界", {
-      color: "#ff01e6",
-      weight: 2,
-      fillOpacity: 0
+      style: { color: "#ff01e6", weight: 2, fillOpacity: 0 }
     });
 
-    // 開水路（PP1_C02により色分け）
     fetch("kaisuiro.geojson")
       .then(res => res.json())
       .then(data => {
-        const layer = L.geoJSON(data, {
-          style: feature => {
+        const kaisuiroLayer = L.geoJSON(data, {
+          style: function (feature) {
             const val = feature.properties.PP1_C02;
             let color = "#000";
             if (val === "005") color = "orange";
             else if (val === "006") color = "#01ffea";
-            return { color };
+            return { color: color };
           },
-          onEachFeature: (feature, layer) => {
-            searchableLayers.push({ name: feature.properties.name, layer });
-            layer.on('click', () => {
+          onEachFeature: function (feature, layer) {
+            const label = feature.properties.name || '';
+            searchableLayers.push({ name: label, layer });
+            layer.on('click', function () {
               layer.bindPopup(createPopup(feature)).openPopup();
             });
           }
-        }).addTo(map);
-        overlayMaps["開水路"] = layer;
-        layersControl.addOverlay(layer, "開水路");
+        });
+        kaisuiroLayer.addTo(map);
+        overlayMaps["開水路"] = kaisuiroLayer;
+        layersControl.addOverlay(kaisuiroLayer, "開水路");
       });
 
-    // 分水工・頭首工（ラベルあり）
     loadLayer("bunsuiko_toshuko.geojson", "分水工・頭首工", {
+      isPoint: true,
+      labelField: "名称",
       color: "green",
       fillColor: "green",
       fillOpacity: 0.7
-    }, "名称", true);
+    });
 
-    // 揚水機場（ラベルあり・ピン表示）
     loadLayer("yosuiki.geojson", "揚水機場", {
+      isPoint: true,
+      labelField: "機場名",
       color: "lightgreen",
       fillColor: "lightgreen",
-      fillOpacity: 0.7
-    }, "機場名", true);
+      fillOpacity: 0.8
+    });
 
-    // 🔍 内部一致検索（表示中レイヤのみ）
+    // 🔍 検索機能（内部一致＆表示中レイヤのみ）
     document.getElementById("searchInput").addEventListener("input", function () {
       const keyword = this.value.trim().toLowerCase();
       searchableLayers.forEach(({ name, layer }) => {
+        if (!name) return;
         const visible = map.hasLayer(layer);
-        if (!keyword) {
+        if (keyword === "") {
           if (!map.hasLayer(layer)) map.addLayer(layer);
-        } else if (name && name.toLowerCase().includes(keyword) && visible) {
+        } else if (name.toLowerCase().includes(keyword) && visible) {
           map.addLayer(layer);
         } else if (visible) {
           map.removeLayer(layer);
