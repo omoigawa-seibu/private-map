@@ -199,12 +199,13 @@
 
     // レイヤ制御
     const overlays = {
-      '地番確認': chibanLayer,
-      '大字境界': oazaLayer,
-      '開水路': kaisuiroLayer,
-      '揚水機場': yosuikiLayer,
-      '分水工・頭首工': bunsuikoLayer
-    };
+  '分水工・頭首工': bunsuikoLayer,
+  '揚水機場': yosuikiLayer,
+  '開水路': kaisuiroLayer,
+  '大字境界': oazaLayer,
+  '地番確認': chibanLayer
+};
+
     L.control.layers(null, overlays, { position: 'topright' }).addTo(map);
 
     // 初期レイヤ追加
