@@ -63,9 +63,8 @@
     });
     fetch("bunsuiko_toshuko.geojson").then(res => res.json()).then(data => bunsuikoLayer.addData(data));
 
-    const yosuikiLayer = L.geoJSON(null, {
-      pointToLayer: (feature, latlng) => {
-        return L.marker(latlng, { icon: yosuikiIcon })
+    const yosuikiLayer = style: { color: 'green' },
+        onEachFeature: onEachFeature
           .bindTooltip(feature.properties.機場名, { permanent: true, direction: 'right' })
           .bindPopup(popupContent(feature));
       }
