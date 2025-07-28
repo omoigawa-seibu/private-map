@@ -125,7 +125,11 @@
         onEachFeature: (feature, layer) => {
           if (feature.properties) {
             createLabel(feature, layer, "機場名");
-            layer.bindPopup(Object.entries(feature.properties).map(([k, v]) => `<b>${k}</b>: ${v}`).join('<br>'));
+            layer.bindTooltip(feature.properties.機場名, {
+            permanent: true,
+            direction: 'top',
+            offset: [0, -10],
+            className: 'label-style'
           }
         }
       }).addTo(map);
