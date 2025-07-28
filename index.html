@@ -18,11 +18,24 @@
       left: 10px;
       z-index: 1000;
       background: white;
-      padding: 5px;
+      padding: 6px 10px;
       border-radius: 8px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.2);
+    }
+    .search-box input {
+      border: none;
+      outline: none;
+      font-size: 14px;
+      width: 160px;
     }
     .leaflet-bottom.leaflet-right {
       margin-bottom: 40px;
+    }
+    .label-style {
+      font-size: 12px;
+      background: rgba(255,255,255,0.8);
+      padding: 2px 4px;
+      border-radius: 4px;
     }
   </style>
 </head>
@@ -38,7 +51,7 @@
   <script>
     const map = L.map('map').setView([36.25, 139.15], 13);
 
-    // タイルレイヤ追加
+    // タイルレイヤ
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
@@ -46,67 +59,69 @@
     // 拡大縮小 左下
     L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
-    // GPSコントロール（右下）
+    // GPS機能（右下）
     L.control.locate({
       position: 'bottomright',
-      strings: { title: "GPS" }
+      strings: { title: "GPSで現在地を表示" }
     }).addTo(map);
 
     // レイヤ管理
     const layers = {};
     const controlLayers = L.control.layers(null, null, { collapsed: false }).addTo(map);
 
-    // ラベル生成関数
+    // ラベル表示共通関数
     function createLabel(feature, layer, field) {
       if (feature.properties && feature.properties[field]) {
         layer.bindTooltip(feature.properties[field], {
           permanent: true,
           direction: 'top',
-          offset: [0, -20],
+          offset: [0, -45], // ピンと重ならないように上に
           className: 'label-style'
         });
       }
     }
 
-    // 地番確認
-    fetch('chiban.geojson').then(res => res.json()).then(data => {
-      layers.chiban = L.geoJSON(data, {
+    // 一括読み込みと順序制御
+    Promise.all([
+      fetch('chiban.geojson').then(res => res.json()),
+      fetch('oaza.geojson').then(res => res.json()),
+      fetch('kaisuiro.geojson').then(res => res.json()),
+      fetch('bunsuiko_toshuko.geojson').then(res => res.json()),
+      fetch('yosuiki.geojson').then(res => res.json())
+    ]).then(([chiban, oaza, kaisuiro, bunsuiko, yosuiki]) => {
+
+      // 地番確認
+      layers.chiban = L.geoJSON(chiban, {
         style: {
           color: 'blue',
           weight: 1,
           fillColor: 'white',
           fillOpacity: 0.5
         }
-      }).addTo(map);
+      });
       controlLayers.addOverlay(layers.chiban, "地番確認");
-    });
 
-    // 大字境界
-    fetch('oaza.geojson').then(res => res.json()).then(data => {
-      layers.oaza = L.geoJSON(data, {
+      // 大字境界
+      layers.oaza = L.geoJSON(oaza, {
         style: {
           color: '#ff01e6',
           weight: 2,
           fill: false
         }
-      }).addTo(map);
+      });
       controlLayers.addOverlay(layers.oaza, "大字境界");
-    });
 
-    // 開水路
-    fetch('kaisuiro.geojson').then(res => res.json()).then(data => {
-      layers.kaisuiro = L.geoJSON(data, {
+      // 開水路
+      layers.kaisuiro = L.geoJSON(kaisuiro, {
         style: {
           color: 'orange',
           weight: 2
         }
-      }).addTo(map);
+      });
       controlLayers.addOverlay(layers.kaisuiro, "開水路");
-    });
 
-    // 分水工・頭首工
-    fetch('bunsuiko_toshuko.geojson').then(res => res.json()).then(data => {
-      layers.bunsuiko = L.geoJSON(data, {
+      // 分水工・頭首工
+      layers.bunsuiko = L.geoJSON(bunsuiko, {
         pointToLayer: (feature, latlng) =>
           L.circleMarker(latlng, {
             radius: 6,
@@ -119,12 +134,10 @@
           createLabel(feature, layer, "名称");
           layer.bindPopup(Object.entries(feature.properties).map(([k, v]) => `<b>${k}</b>: ${v}`).join('<br>'));
         }
-      }).addTo(map);
+      });
       controlLayers.addOverlay(layers.bunsuiko, "分水工・頭首工");
-    });
 
-    // 揚水機場（ピン + ラベル）
-    fetch('yosuiki.geojson').then(res => res.json()).then(data => {
+      // 揚水機場（ピン）
       const greenPin = new L.Icon({
         iconUrl: 'https://cdn-icons-png.flaticon.com/512/252/252025.png',
         iconSize: [25, 41],
@@ -132,22 +145,28 @@
         popupAnchor: [0, -41]
       });
 
-      layers.yosuiki = L.geoJSON(data, {
-        pointToLayer: (feature, latlng) =>
-          L.marker(latlng, { icon: greenPin }),
+      layers.yosuiki = L.geoJSON(yosuiki, {
+        pointToLayer: (feature, latlng) => L.marker(latlng, { icon: greenPin }),
         onEachFeature: (feature, layer) => {
           createLabel(feature, layer, "機場名");
           layer.bindPopup(Object.entries(feature.properties).map(([k, v]) => `<b>${k}</b>: ${v}`).join('<br>'));
         }
-      }).addTo(map);
+      });
       controlLayers.addOverlay(layers.yosuiki, "揚水機場");
+
+      // レイヤの表示順（地番 → 揚水機）
+      layers.chiban.addTo(map);
+      layers.oaza.addTo(map);
+      layers.kaisuiro.addTo(map);
+      layers.bunsuiko.addTo(map);
+      layers.yosuiki.addTo(map);
     });
 
-    // 🔍 内部一致検索（表示中レイヤのみ）
+    // 検索機能（表示中レイヤのみに内部一致）
     document.getElementById("searchInput").addEventListener("input", function () {
       const keyword = this.value.trim();
       Object.values(layers).forEach(layer => {
-        if (!map.hasLayer(layer)) return; // 表示中レイヤのみ
+        if (!map.hasLayer(layer)) return;
         layer.eachLayer(l => {
           if (l.feature?.properties) {
             const props = Object.values(l.feature.properties).join(" ");
