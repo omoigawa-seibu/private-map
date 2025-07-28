@@ -116,7 +116,7 @@
         iconUrl: 'https://cdn-icons-png.flaticon.com/512/252/252025.png',
         iconSize: [25, 41],
         iconAnchor: [12, 41],
-        popupAnchor: [0, -35]
+        popupAnchor: [0, -41]
       });
 
       layers.yosuiki = L.geoJSON(data, {
@@ -125,7 +125,11 @@
         onEachFeature: (feature, layer) => {
           if (feature.properties) {
             createLabel(feature, layer, "機場名");
-            layer.bindPopup(Object.entries(feature.properties).map(([k, v]) => `<b>${k}</b>: ${v}`).join('<br>'));
+            layer.bindTooltip(feature.properties.機場名, {
+            permanent: true,
+            direction: 'top',
+            offset: [0, -30],
+            className: 'label-style'
           }
         }
       }).addTo(map);
@@ -145,6 +149,18 @@
 
     // 拡大・縮小を左下に
     L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+     // GeoJSONファイル読み込み
+    fetch("chiban.geojson").then(res => res.json()).then(data => chibanLayer.addData(data));
+    fetch("oaza.geojson").then(res => res.json()).then(data => oazaLayer.addData(data));
+    fetch("kaisuiro.geojson").then(res => res.json()).then(data => kaisuiroLayer.addData(data));
+    fetch("bunsuiko_toshuko.geojson").then(res => res.json()).then(data => bunsuikoLayer.addData(data));
+    fetch("yosuiki.geojson").then(res => res.json()).then(data => yosuikiLayer.addData(data));
+  </script>
+
+  <!-- Leaflet.Locate Plugin (GPS用) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.css" />
+  <script src="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.js"></script>
 
     // 検索機能（内部一致）
     document.getElementById("searchInput").addEventListener("input", function () {
