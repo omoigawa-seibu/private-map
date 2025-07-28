@@ -39,17 +39,8 @@
       maxZoom: 19
     }).addTo(map);
 
-    // --- カスタムアイコン（揚水機用） ---
-    const yosuikiIcon = L.icon({
-      iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x-green.png",
-      iconSize: [25, 41],
-      iconAnchor: [12, 41],
-      popupAnchor: [1, -34],
-      shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-      shadowSize: [41, 41]
-    });
-
-    // --- 各レイヤ ---
+    // --- 各レイヤ読み込みとスタイル設定 ---
+    // ① 分水工・頭首工
     const bunsuikoLayer = L.geoJSON(null, {
       pointToLayer: (feature, latlng) => {
         return L.circleMarker(latlng, {
@@ -63,15 +54,21 @@
     });
     fetch("bunsuiko_toshuko.geojson").then(res => res.json()).then(data => bunsuikoLayer.addData(data));
 
+    // ② 揚水機場
     const yosuikiLayer = L.geoJSON(null, {
       pointToLayer: (feature, latlng) => {
-        return L.marker(latlng, { icon: yosuikiIcon })
-          .bindTooltip(feature.properties.機場名, { permanent: true, direction: 'right' })
+        return L.circleMarker(latlng, {
+          radius: 6,
+          color: "#99cc00",
+          fillColor: "#99cc00",
+          fillOpacity: 1
+        }).bindTooltip(feature.properties.機場名, { permanent: true, direction: 'right' })
           .bindPopup(popupContent(feature));
       }
     });
     fetch("yosuiki.geojson").then(res => res.json()).then(data => yosuikiLayer.addData(data));
 
+    // ③ 開水路
     const kaisuiroLayer = L.geoJSON(null, {
       style: {
         color: "orange",
@@ -83,6 +80,7 @@
     });
     fetch("kaisuiro.geojson").then(res => res.json()).then(data => kaisuiroLayer.addData(data));
 
+    // ④ 大字境界
     const oazaLayer = L.geoJSON(null, {
       style: {
         color: "#ff01e6",
@@ -95,6 +93,7 @@
     });
     fetch("oaza.geojson").then(res => res.json()).then(data => oazaLayer.addData(data));
 
+    // ⑤ 地番確認
     const chibanLayer = L.geoJSON(null, {
       style: {
         color: "blue",
@@ -108,14 +107,14 @@
     });
     fetch("chiban.geojson").then(res => res.json()).then(data => chibanLayer.addData(data));
 
-    // --- レイヤ追加順（地番→大字→開水路→揚水機→分水工） ---
+    // --- レイヤ順設定（下から順に追加） ---
     chibanLayer.addTo(map);
     oazaLayer.addTo(map);
     kaisuiroLayer.addTo(map);
     yosuikiLayer.addTo(map);
     bunsuikoLayer.addTo(map);
 
-    // --- レイヤコントロール（表示順逆順） ---
+    // --- レイヤ表示コントロール（表示順を逆にする） ---
     const overlays = {
       "分水工・頭首工": bunsuikoLayer,
       "揚水機場": yosuikiLayer,
@@ -125,7 +124,7 @@
     };
     L.control.layers(null, overlays, { position: 'topright', collapsed: false }).addTo(map);
 
-    // --- GPSボタン（右下） ---
+    // --- GPSボタン ---
     const gpsControl = L.control({ position: 'bottomright' });
     gpsControl.onAdd = function () {
       const div = L.DomUtil.create('div', 'leaflet-bar');
@@ -141,10 +140,10 @@
     };
     gpsControl.addTo(map);
 
-    // --- 拡大・縮小ボタン（左下） ---
+    // --- 拡大・縮小ボタン 左下配置 ---
     L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
-    // --- 検索機能（内部一致＆表示レイヤのみ） ---
+    // --- 検索機能（内部一致＋表示中レイヤのみ） ---
     function searchFeatures() {
       const keyword = document.getElementById("searchInput").value.trim();
       if (!keyword) return;
