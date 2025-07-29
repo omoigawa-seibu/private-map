@@ -138,7 +138,7 @@
             fillOpacity: 1
           }),
         onEachFeature: (feature, layer) => {
-          createLabel(feature, layer, "名称", [0, -12]);
+          createLabel(feature, layer, "名称", [0, -5]);
           layer.bindPopup(Object.entries(feature.properties).map(([k, v]) => `<b>${k}</b>: ${v}`).join('<br>'));
         }
       });
