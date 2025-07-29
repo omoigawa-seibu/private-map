@@ -69,13 +69,13 @@
     const layers = {};
     const controlLayers = L.control.layers(null, null, { collapsed: false }).addTo(map);
 
-    // ラベル表示共通関数
-    function createLabel(feature, layer, field) {
+    // ラベル表示共通関数（offset指定可能）
+    function createLabel(feature, layer, field, offset = [0, -20]) {
       if (feature.properties && feature.properties[field]) {
         layer.bindTooltip(feature.properties[field], {
           permanent: true,
           direction: 'top',
-          offset: [0, -45], // ピンと重ならないように上に
+          offset: offset,
           className: 'label-style'
         });
       }
@@ -120,7 +120,7 @@
       });
       controlLayers.addOverlay(layers.kaisuiro, "開水路");
 
-      // 分水工・頭首工
+      // 分水工・頭首工（円マーカー）
       layers.bunsuiko = L.geoJSON(bunsuiko, {
         pointToLayer: (feature, latlng) =>
           L.circleMarker(latlng, {
@@ -131,13 +131,13 @@
             fillOpacity: 1
           }),
         onEachFeature: (feature, layer) => {
-          createLabel(feature, layer, "名称");
+          createLabel(feature, layer, "名称", [0, -20]); // ← オフセット修正済
           layer.bindPopup(Object.entries(feature.properties).map(([k, v]) => `<b>${k}</b>: ${v}`).join('<br>'));
         }
       });
       controlLayers.addOverlay(layers.bunsuiko, "分水工・頭首工");
 
-      // 揚水機場（ピン）
+      // 揚水機場（ピンマーカー）
       const greenPin = new L.Icon({
         iconUrl: 'https://cdn-icons-png.flaticon.com/512/252/252025.png',
         iconSize: [25, 41],
@@ -148,13 +148,13 @@
       layers.yosuiki = L.geoJSON(yosuiki, {
         pointToLayer: (feature, latlng) => L.marker(latlng, { icon: greenPin }),
         onEachFeature: (feature, layer) => {
-          createLabel(feature, layer, "機場名");
+          createLabel(feature, layer, "機場名", [0, -45]); // ← ピン用オフセット
           layer.bindPopup(Object.entries(feature.properties).map(([k, v]) => `<b>${k}</b>: ${v}`).join('<br>'));
         }
       });
       controlLayers.addOverlay(layers.yosuiki, "揚水機場");
 
-      // レイヤの表示順（地番 → 揚水機）
+      // 表示順：下層から上層へ
       layers.chiban.addTo(map);
       layers.oaza.addTo(map);
       layers.kaisuiro.addTo(map);
